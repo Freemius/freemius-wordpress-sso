@@ -209,6 +209,27 @@
                 update_user_meta( $user->ID, 'fs_user_id', $fs_user_id );
             }
 
+            if ( $user instanceof WP_User ) {
+                if ( ! $this->get_freemius_has_any_licenses( $user->ID ) ) {
+                    $has_any_licenses = 'no';
+
+                    $result = $this->fetch_user_store_license( $fs_user_id, $fs_user_token->access );
+
+                    if ( ! is_wp_error( $result ) ) {
+                        $result = json_decode( $result['body'] );
+
+                        if ( is_object( $result ) &&
+                             ! isset( $result->error ) &&
+                             ! empty( $result->licenses )
+                        ) {
+                            $has_any_licenses = 'yes';
+                        }
+                    }
+
+                    update_user_meta( $user->ID, 'fs_has_licenses', $has_any_licenses );
+                }
+            }
+
             return $user;
         }
 
@@ -237,6 +258,21 @@
             return get_user_meta( get_current_user_id(), 'fs_token', true );
         }
 
+        /**
+         * Is currently logged in user has any store licenses on Freemius.
+         *
+         * @param int|null $user_id
+         *
+         * @return bool
+         */
+        public function get_freemius_has_any_licenses( $user_id = null ) {
+            if (is_null( $user_id )) {
+                $user_id = get_current_user_id();
+            }
+
+            return ( 'yes' === get_user_meta( $user_id, 'fs_has_licenses', 'no' ) );
+        }
+
         #region Helper Methods
 
         /**
@@ -246,9 +282,7 @@
          * @return array|WP_Error
          */
         private function fetch_user_access_token( $email, $password = '' ) {
-            $api_root = $this->_use_localhost_api ?
-                'http://api.freemius-local.com:8080' :
-                'https://fast-api.freemius.com';
+            $api_root = $this->get_api_root();
 
             // Fetch user's info and access token from Freemius.
             return wp_remote_post(
@@ -265,6 +299,38 @@
                     )
                 )
             );
+        }
+
+        /**
+         * @param number $fs_user_id
+         * @param string $access_token
+         *
+         * @return array|\WP_Error
+         */
+        private function fetch_user_store_license( $fs_user_id, $access_token ) {
+            $api_root = $this->get_api_root();
+
+            // Fetch user's info and access token from Freemius.
+            return wp_remote_post(
+                "{$api_root}/v1/users/{$fs_user_id}/licenses.json?" . http_build_query( array(
+                    'count'         => 1,
+                    'store_id'      => $this->_store_id,
+                    'authorization' => "FSA {$fs_user_id}:$access_token",
+                ), null, '&', PHP_QUERY_RFC3986 ),
+                array(
+                    'method'   => 'GET',
+                    'blocking' => true,
+                )
+            );
+        }
+
+        /**
+         * @return string
+         */
+        private function get_api_root() {
+            return $this->_use_localhost_api ?
+                'http://api.freemius-local.com:8080' :
+                'https://fast-api.freemius.com';
         }
 
         /**
