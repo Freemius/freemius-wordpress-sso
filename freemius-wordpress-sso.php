@@ -113,6 +113,7 @@
                      'authentication_failed',
                      'invalid_email',
                      'invalid_password',
+                     'incorrect_password',
                  ) )
             ) {
                 return $user;
