@@ -301,7 +301,7 @@
          *
          * @return bool
          */
-        public function get_freemius_has_any_licenses( $user_id = null ) {
+        public function get_freemius_has_any_license( $user_id = null ) {
             if (is_null( $user_id )) {
                 $user_id = get_current_user_id();
             }
