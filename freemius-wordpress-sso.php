@@ -197,8 +197,7 @@
 
                         $user = get_user_by( 'ID', $user_id );
 
-                        $user->set_role( 'subscriber' );
-                        $user->add_role( 'edd_subscriber' );
+                        do_action( 'fs_sso_after_user_creation', $user );
                     }
                 }
 
@@ -264,6 +263,8 @@
 
                 update_user_meta( $user->ID, 'fs_has_active_licenses', $has_any_active_licenses );
             }
+
+            do_action( 'fs_sso_after_successful_login', $user );
 
             return $user;
         }
