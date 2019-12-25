@@ -113,6 +113,7 @@
                      'authentication_failed',
                      'invalid_email',
                      'invalid_password',
+                     'incorrect_password',
                  ) )
             ) {
                 return $user;
@@ -197,8 +198,7 @@
 
                         $user = get_user_by( 'ID', $user_id );
 
-                        $user->set_role( 'subscriber' );
-                        $user->add_role( 'edd_subscriber' );
+                        do_action( 'fs_sso_after_user_creation', $user );
                     }
                 }
 
@@ -208,6 +208,64 @@
                 update_user_meta( $user->ID, 'fs_token', $fs_user_token );
                 update_user_meta( $user->ID, 'fs_user_id', $fs_user_id );
             }
+
+            if ( $user instanceof WP_User ) {
+                $has_any_active_licenses = 'no';
+
+                if ( $this->get_freemius_has_any_license( $user->ID ) ) {
+                    $has_any_licenses = 'yes';
+                } else {
+                    $has_any_licenses = 'no';
+
+                    $result = $this->fetch_user_store_licenses( $fs_user_id, $fs_user_token->access );
+
+                    if ( ! is_wp_error( $result ) ) {
+                        $result = json_decode( $result['body'] );
+
+                        if ( is_object( $result ) &&
+                             ! isset( $result->error ) &&
+                             ! empty( $result->licenses )
+                        ) {
+                            $has_any_licenses = 'yes';
+
+                            /**
+                             * Check if license is active to save an API call.
+                             */
+                            $license = $result->licenses[0];
+                            if ( false === $license->is_cancelled &&
+                                 ! $this->has_license_expired( $license )
+                            ) {
+                                $has_any_active_licenses = 'yes';
+                            }
+                        }
+                    }
+
+                    update_user_meta( $user->ID, 'fs_has_licenses', $has_any_licenses );
+                }
+
+                if ('yes' !== $has_any_active_licenses && 'yes' === $has_any_licenses) {
+                    $result = $this->fetch_user_store_licenses(
+                        $fs_user_id,
+                        $fs_user_token->access,
+                        'active'
+                    );
+
+                    if ( ! is_wp_error( $result ) ) {
+                        $result = json_decode( $result['body'] );
+
+                        if ( is_object( $result ) &&
+                             ! isset( $result->error ) &&
+                             ! empty( $result->licenses )
+                        ) {
+                            $has_any_active_licenses = 'yes';
+                        }
+                    }
+                }
+
+                update_user_meta( $user->ID, 'fs_has_active_licenses', $has_any_active_licenses );
+            }
+
+            do_action( 'fs_sso_after_successful_login', $user );
 
             return $user;
         }
@@ -237,6 +295,36 @@
             return get_user_meta( get_current_user_id(), 'fs_token', true );
         }
 
+        /**
+         * Is currently logged in user has any store licenses on Freemius.
+         *
+         * @param int|null $user_id
+         *
+         * @return bool
+         */
+        public function get_freemius_has_any_license( $user_id = null ) {
+            if (is_null( $user_id )) {
+                $user_id = get_current_user_id();
+            }
+
+            return ( 'yes' === get_user_meta( $user_id, 'fs_has_licenses', 'no' ) );
+        }
+
+        /**
+         * Is currently logged in user has any store licenses on Freemius.
+         *
+         * @param int|null $user_id
+         *
+         * @return bool
+         */
+        public function get_freemius_has_any_active_license( $user_id = null ) {
+            if (is_null( $user_id )) {
+                $user_id = get_current_user_id();
+            }
+
+            return ( 'yes' === get_user_meta( $user_id, 'fs_has_active_licenses', 'no' ) );
+        }
+
         #region Helper Methods
 
         /**
@@ -246,9 +334,7 @@
          * @return array|WP_Error
          */
         private function fetch_user_access_token( $email, $password = '' ) {
-            $api_root = $this->_use_localhost_api ?
-                'http://api.freemius-local.com:8080' :
-                'https://fast-api.freemius.com';
+            $api_root = $this->get_api_root();
 
             // Fetch user's info and access token from Freemius.
             return wp_remote_post(
@@ -265,6 +351,41 @@
                     )
                 )
             );
+        }
+
+        /**
+         * @param number $fs_user_id
+         * @param string $access_token
+         * @param string $type
+         * @param int    $count
+         *
+         * @return array|\WP_Error
+         */
+        private function fetch_user_store_licenses( $fs_user_id, $access_token, $type = 'all', $count = 1 ) {
+            $api_root = $this->get_api_root();
+
+            // Fetch user's info and access token from Freemius.
+            return wp_remote_post(
+                "{$api_root}/v1/users/{$fs_user_id}/licenses.json?" . http_build_query( array(
+                    'count'         => $count,
+                    'store_id'      => $this->_store_id,
+                    'type'          => $type,
+                    'authorization' => "FSA {$fs_user_id}:$access_token",
+                ), null, '&', PHP_QUERY_RFC3986 ),
+                array(
+                    'method'   => 'GET',
+                    'blocking' => true,
+                )
+            );
+        }
+
+        /**
+         * @return string
+         */
+        private function get_api_root() {
+            return $this->_use_localhost_api ?
+                'http://api.freemius-local.com:8080' :
+                'https://fast-api.freemius.com';
         }
 
         /**
@@ -287,6 +408,43 @@
             } while ( username_exists( $username ) );
 
             return $username;
+        }
+
+        /**
+         * @param object $license
+         *
+         * @return bool
+         */
+        private function has_license_expired( $license ) {
+            if ( is_null( $license->expiration ) ) {
+                // Lifetime license.
+                return false;
+            }
+
+            return ( time() >= $this->get_timestamp_from_datetime( $license->expiration ) );
+        }
+
+        /**
+         * @param string $datetime
+         *
+         * @return int
+         */
+        private function get_timestamp_from_datetime( $datetime ) {
+            $timezone = date_default_timezone_get();
+
+            if ( 'UTC' !== $timezone ) {
+                // Temporary change time zone.
+                date_default_timezone_set( 'UTC' );
+            }
+
+            $timestamp = date( 'Y-m-d H:i:s', $datetime );
+
+            if ( 'UTC' !== $timezone ) {
+                // Revert timezone.
+                date_default_timezone_set( $timezone );
+            }
+
+            return $timestamp;
         }
 
         #endregion
