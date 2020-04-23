@@ -66,6 +66,21 @@
 
             // Clean up the stored access token upon logout.
             add_action( 'clear_auth_cookie', array( &$this, 'clear_access_token' ), 30, 3 );
+            
+            // Handle EDD login
+            add_action( 'edd_log_user_in', array( &$this, 'handle_edd_login' ), 30, 3 );
+        }
+        
+        
+        /**
+         * Handle EDD Login Form
+         *
+         * @param integer $user_id 
+         * @param string $user_login
+         * @param string $user_pass
+         */
+        public function handle_edd_login( $user_id, $user_login, $user_pass ) {
+            $this->authenticate( get_userdata( $user_id ), $user_login, $user_pass );
         }
 
         /**
