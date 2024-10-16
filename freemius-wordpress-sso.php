@@ -437,7 +437,7 @@
                 date_default_timezone_set( 'UTC' );
             }
 
-            $timestamp = date( 'Y-m-d H:i:s', $datetime );
+            $timestamp = date( 'Y-m-d H:i:s', strtotime( $datetime ) );
 
             if ( 'UTC' !== $timezone ) {
                 // Revert timezone.
