@@ -451,7 +451,7 @@
     }
 
     FS_SSO::instance()->init(
-        '<STORE_ID>',
-        '<DEVELOPER_ID>',
-        '<DEVELOPER_SECRET_KEY>'
+        FREEMIUS_STORE_ID,
+        FREEMIUS_DEVELOPER_ID,
+        FREEMIUS_SECRET_KEY
     );
