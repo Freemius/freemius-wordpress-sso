@@ -2,7 +2,7 @@
 
 Easily allow users logging into your WordPress store with their Freemius credentials. If a user logs in with their Freemius credentials and there was no matching user in WordPress, a new user with the same email address and password will be created in WordPress.
 
-When [embedding the User Dashboard](https://freemius.com/help/documentation/users-account-management/users-dashboard/) using our [User Dashboard WordPress plugin](https://github.com/Freemius/freemius-users-dashboard), a logged-in user will be automatically logged into their Freemius User Dashboard without the need to manually log in.
+When [embedding the Customer Portal](https://freemius.com/help/documentation/users-account-management/users-dashboard/) using our [Customer Portal WordPress plugin](https://github.com/Freemius/freemius-users-dashboard), a logged-in user will be automatically logged into their Freemius Customer Portal without the need to manually log in.
 
 ## Installation
 
